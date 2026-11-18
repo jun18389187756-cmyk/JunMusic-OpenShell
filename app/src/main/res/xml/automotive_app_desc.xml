@@ -1,0 +1,4 @@
+<automotiveApp>
+    <!-- 声明本应用支持 Android Auto 的"媒体"模板（浏览曲库 + 播放控制） -->
+    <uses name="media" />
+</automotiveApp>
