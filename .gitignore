@@ -1,0 +1,28 @@
+# Build
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+.vscode/
+capsule/
+*/build/
+
+# Secrets — NEVER commit
+*.jks
+*.keystore
+keystore.properties
+gradle.properties.local
+*secret*
+*password*
+*凭据*
+
+# Local dev
+.DS_Store
+*.log
+/output/
+
+# Temp
+__pycache__/
+*.pyc
