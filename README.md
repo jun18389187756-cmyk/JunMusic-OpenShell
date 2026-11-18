@@ -1,0 +1,3 @@
+# JunMusic-OpenShell
+
+Initializing repository...
