@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.JunMusic" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:windowBackground">#000000</item>
+    </style>
+
+    <!--
+      锁屏页主题（6.9.12）。
+
+      原来用的是 @android:style/Theme.Black.NoTitleBar —— 它的 windowBackground 是纯黑，
+      在 Compose 首帧绘制之前整屏（含状态栏区域）会露出黑底，加上状态栏图标没被隐藏，
+      用户看到的就是"最上面一条大黑边"。这里改成：
+        · 系统栏全透明、不绘制系统栏背景；
+        · 窗口背景透明，让 Compose 的第一帧直接接管（父窗口是系统锁屏，不会露白）；
+        · 不要 ActionBar、不要过渡动画，亮屏即整屏呈现。
+    -->
+    <style name="Theme.JunMusic.LockScreen" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
