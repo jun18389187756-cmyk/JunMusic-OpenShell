@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置。
+
+  本 App 的在线播放走「本地音频代理」：ExoPlayer 实际播放
+  http://127.0.0.1:8089/audio?id=…（明文 HTTP）。若把 cleartext 设为 false，
+  连 127.0.0.1 的明文请求也会被 Android 拦截，报
+  "CLEARTEXT communication to 127.0.0.1 not permitted"，
+  表现为：能切歌但完全没声音。
+
+  同时在线曲目的真实地址来自第三方 CDN（网易云等），域名/IP 不稳定，
+  因此这里统一放行明文（等价于原先的 usesCleartextTraffic="true"）。
+  注意：这只是传输策略，不会新增任何危险权限，不会加重安装时的权限告警。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
