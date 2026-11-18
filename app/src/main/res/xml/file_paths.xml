@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 公共音乐目录：默认下载路径 Music/Jun Music -->
+    <external-path name="music" path="Music/" />
+    <!-- 自定义下载目录可能在任意外部存储路径，用 external-files-path 兜底 -->
+    <external-files-path name="external_files" path="." />
+    <!-- 内部缓存（极端情况） -->
+    <cache-path name="cache" path="." />
+    <!--
+      6.2：删掉原来那条 `<external-path name="external_all" path="."/>`。
+      它把**整块外部存储**纳入 FileProvider 可授权范围——任何一次「分享」只要指向
+      /sdcard 下的某个文件，被授权的应用就能顺着同一目录读到用户的其他文件（照片、
+      文档、别的 App 的落盘数据），而本 App 真正需要分享的只有下面这三处：
+      公共 Music 目录、App 自己的外部文件目录、内部缓存。自定义下载目录走的是 SAF
+      content:// 树 URI，本来就不经过这里，不需要整盘授权。
+    -->
+</paths>
