@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      小组件控制广播的来源认证不放在这里（6.2）：两颗小组件的 receiver 必须 exported
+      （桌面要往这里发 APPWIDGET_UPDATE，这是小组件能工作的前提），而
+      `PendingIntent.getBroadcast()` 没有「要求接收方持有权限」的重载，signature 级自定义
+      权限既挂不进按钮的 PendingIntent，又会在 onReceive 里被 checkCallingOrSelfPermission
+      的「无调用方身份就查自己」回落吃干净。真正的判据是 Intent 里那份每次安装生成的私有
+      令牌，见 playback/WidgetState.kt 的 WidgetGuard。
+    -->
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- 6.7.0：定时提醒 —— 开机恢复 + 专用前台服务类型 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 6.7 修：锁屏歌词「亮屏即见」——用 fullScreenIntent 通知绕过 Android 10+
+         的后台启动 Activity 限制。Android 14+ 该权限可能被系统默认拒绝（属系统边界），
+         此时退化为 MusicService 里原有的直接 startActivity 兜底，不引入回归。 -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- 桌面悬浮歌词用 TYPE_APPLICATION_OVERLAY，缺这个权限授权页里根本没有本 App 的开关 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- 纯在线音乐：曲库 / 搜索 / 封面 / 歌词全部走网络 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 局域网遥控：读取 Wi-Fi 地址并在 0.0.0.0:8099 监听 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- 应用内更新：下载完 APK 直接拉起系统安装器（Android 8.0+ 需用户授权一次） -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- ==== 硬件特性一律 required="false"（老机适配）====
+         不写 required 时默认按 true 处理，商店与侧载安装器会把"没有振动器 /
+         不支持动态壁纸"的设备判为不兼容。这两项功能本来就各有运行时开关
+         与老机安全档否决（见 DevicePerformance.allowBassHaptics / allowLyricWallpaper），
+         属于"能不能用"的问题，不该影响"能不能装"。 -->
+    <uses-feature android:name="android.hardware.vibrator" android:required="false" />
+    <uses-feature android:name="android.software.live_wallpaper" android:required="false" />
+
+    <!-- 与"数据只留在本机"的承诺一致：关闭系统备份/设备迁移，
+             避免听歌统计、播放历史经 Google 云备份离开本机 -->
+    <!-- 刻意不加 android:largeHeap（老机适配说明）：
+         EMUI 10 上 largeHeap 只是把"进程堆上限"抬高，LMK 用的 oom_adj 与水位线不变——
+         结果是同一个进程被允许占更多内存、也更容易被功耗守护/清理加速整体杀掉，
+         而且被杀时留给系统的回收时间更长，正是"播放中自己重启"的另一种形态。
+         本项目改用按机型分档收缩缓存/并发/预算（DevicePerformance.cacheLimitMb、
+         artworkMemoryMb、prefetchBatch）与 onTrimMemory 主动让路来解决内存问题。 -->
+        <application
+        android:name=".JunApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.JunMusic">
+
+        <!-- 老机适配（nova 6 / EMUI 10 专项）：configChanges 把配置变更全部自己接下来，绝不重建 Activity。
+             原来只有 orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden，
+             于是下面这些 EMUI 常见动作都会触发 Activity 销毁重建：
+               density        —— 设置里的「显示大小」
+               fontScale      —— 「字体大小与粗细」（护眼模式联动时也会变）
+               uiMode         —— 深色模式定时切换、电子书/护眼模式改 UI 类别
+               colorMode      —— 色彩模式（鲜艳/标准/护眼）切换
+               locale / layoutDirection —— 语言与书写方向
+               keyboard / navigation    —— 蓝牙耳机、外接键盘、手柄连断
+             播放中重建 Activity 的代价远大于"重新布局"：Compose 整棵树、玻璃背板、
+             视频/壁纸层、悬浮窗全部重建一次，而 Android 10 的 EMUI 在 Keyguard 刚弹出的
+             瞬间做这件事，就会出现用户描述的"屏幕闪一下停在输入密码页、之后再不动"。
+             界面全部是运行时读取配置的、不依赖重建；相应的收尾写在
+             MainActivity.onConfigurationChanged 里，不是把它丢掉。 -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="fullUser"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|fontScale|uiMode|colorMode|locale|layoutDirection"
+            android:theme="@style/Theme.JunMusic">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 6.9.7：锁屏音乐界面。
+             亮屏且未解锁时由 MusicService 拉起，盖在 Keyguard 之上显示封面/歌词/控制；
+             showWhenLocked + turnScreenOn 由代码在 onCreate 里设置（兼容 API 27 以下）。
+             excludeFromRecents：它不是用户主动打开的任务，不该出现在最近任务里。
+             6.7 修：清单里补 showWhenLocked/turnScreenOn 双保险（minSdk 24 上这两个
+             属性被忽略，旧系统仍走 onCreate 里的 window flag），配合 fullScreenIntent
+             让系统在锁屏状态立即放行拉起。 -->
+        <activity
+            android:name=".LockScreenActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation|density|fontScale|uiMode|colorMode|locale|layoutDirection"
+            android:theme="@style/Theme.JunMusic.LockScreen" />
+
+        <!-- 前台播放服务：持有 ExoPlayer 与媒体会话。
+             MediaLibraryService 是 MediaSessionService 的超集：
+             既提供手机端媒体控制，又提供"浏览树"供 Android Auto / 车机列出曲库选歌。 -->
+        <service
+            android:name=".playback.MusicService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <!-- 让 Android Auto / 系统媒体浏览器能发现并浏览本 App 的曲库 -->
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+            <!-- 声明本 App 支持 Android Auto 的媒体模板 -->
+            <meta-data
+                android:name="com.google.android.gms.car.application"
+                android:resource="@xml/automotive_app_desc" />
+        </service>
+
+        <!-- 6.7.0：定时提醒的后台服务（用户要求"每隔 N 分钟弹系统通知，退到后台也跑"）。
+             前台服务类型 specialUse：这不是播放、不是定位，属于"用户主动开启的定时提醒"。
+             Android 14 起必须声明 subtype，否则 startForeground 直接抛异常。 -->
+        <service
+            android:name=".playback.ReminderService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="scheduled_local_notification_reminder" />
+        </service>
+
+        <!-- 开机 / 升级后恢复定时提醒 + 每 15 分钟看门狗（防国产 ROM 清后台） -->
+        <receiver
+            android:name=".playback.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- 歌词动态壁纸 -->
+        <service
+            android:name=".playback.LyricWallpaperService"
+            android:exported="true"
+            android:permission="android.permission.BIND_WALLPAPER">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/lyric_wallpaper" />
+        </service>
+
+        <!-- 分享/打开已下载文件：FileProvider 把本地文件路径转成 content:// URI -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- 桌面播放控制小组件 -->
+        <receiver
+            android:name=".playback.MusicWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.jun.musiccloud.widget.PREV" />
+                <action android:name="com.jun.musiccloud.widget.PLAY" />
+                <action android:name="com.jun.musiccloud.widget.NEXT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/music_widget_info" />
+        </receiver>
+
+        <!-- 桌面 4×4 大尺寸播放控制小组件 -->
+        <receiver
+            android:name=".playback.MusicWidget4x4"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.jun.musiccloud.widget4x4.PREV" />
+                <action android:name="com.jun.musiccloud.widget4x4.PLAY" />
+                <action android:name="com.jun.musiccloud.widget4x4.NEXT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/music_widget_4x4_info" />
+        </receiver>
+
+    </application>
+
+</manifest>
