@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jun Music</string>
+    <string name="widget_description">Jun Music 桌面播放控制</string>
+    <string name="widget_description_4x4">Jun Music 4×4 大尺寸播放控制</string>
+    <string name="lyric_wallpaper_desc">把正在播放的歌词放在桌面</string>
+</resources>
